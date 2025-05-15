@@ -1,54 +1,67 @@
 
-# Proxmox VM Management Tool
+# Rust Development Environment in Docker
 
-A Rust utility for managing Proxmox VMs and templates, providing functionality to list and remove virtual machines. Built with Rust and packaged as a static binary using MUSL for maximum compatibility.
+A Docker-based Rust development environment that allows you to build and run Rust applications without installing Rust on your host machine. This template provides a complete, isolated Rust development environment with all necessary tools pre-installed.
 
 ## Features
 
-- List all VMs/templates with ID, type and name
-- Remove single or multiple VMs/templates
-- Automatic detection of Proxmox environment
-- Safety checks before removal:
-  - Verify VM/template exists
-  - Check if VM is running (stops it first)
-  - Differentiate between VMs and templates
-- **Docker support** for easy deployment and development
-- **Static MUSL builds** for maximum compatibility across Linux distributions
+- Full Rust development environment without host installation
+- Pre-configured with common development tools
+- Easy to use with simple Docker commands
+- Supports both development and production builds
+- Includes tools for code formatting, linting, and testing
 
-## Installation
+## Getting Started
 
-### Option 1: Using Docker (Recommended)
+### Prerequisites
 
-**Requirements:** Docker installed
+- Docker installed on your system
+- Basic knowledge of Docker and Rust
+
+### Quick Start
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/yourusername/rust-docker.git
+   cd rust-docker
+   ```
+
+2. Build and run the development container:
+   ```bash
+   # Start the development environment
+   ./docker/run.sh dev
+   ```
+   This will give you an interactive shell inside the container with all Rust tools installed.
+
+3. Inside the container, you can use standard Cargo commands:
+   ```bash
+   # Create a new project
+   cargo new myapp
+   cd myapp
+   
+   # Build and run
+   cargo run
+   ```
+
+## Development Workflow
+
+### Using the Development Container
+
+The development container comes with:
+- Rust toolchain (stable, nightly)
+- Common development tools (git, vim, curl, etc.)
+- Rust-analyzer for IDE support
+- Cargo watch for automatic rebuilding
+
+### Building for Production
+
+To build a release version of your application:
 
 ```bash
-# Build the Docker image
-# This will compile the Rust code inside the container
-docker build -t proxmox-vm-manager .
+# Build a release binary
+./docker/run.sh build --release
 
-# Run the application
-docker run -it --rm -v $(pwd)/config:/app/config proxmox-vm-manager list
-```
-
-### Option 2: Using the development script
-
-**Requirements:** Docker installed
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/digi4care/proxmox-vm-manager.git
-   cd proxmox-vm-manager
-   ```
-
-2. Make the script executable:
-   ```bash
-   chmod +x docker/run.sh
-   ```
-
-3. Build and run:
-   ```bash
-   # Build the application (compiles Rust code in a Docker container)
-   ./docker/run.sh build
+# The binary will be available in the target/release directory
 
    # Run the application
    ./docker/run.sh run list

@@ -1,54 +1,128 @@
-# Development Guide
+# Rust Docker Development Guide
 
-## Building with MUSL (Static Binary)
+This guide provides detailed information about the Rust Docker development environment and how to use it effectively.
 
-### Using Docker (Recommended)
+## Development Container
+
+The development container is based on the official Rust Docker image and includes:
+- Latest stable Rust toolchain
+- Cargo package manager
+- Common development tools (git, vim, curl, etc.)
+- Rust-analyzer for IDE support
+- Cargo watch for automatic rebuilding
+
+## Getting Started
+
+### Starting the Development Environment
 
 ```bash
-# Build a static MUSL binary using the provided script
-./docker/run.sh musl
+# Start the development container
+./docker/run.sh dev
 
-# The binary will be available at:
-# target/x86_64-unknown-linux-musl/release/proxmox-vm-manager
+# This will give you a shell inside the container with:
+# - Your source code mounted at /workspace
+# - All Rust tools available in PATH
+# - Proper file permissions for your user
 ```
 
-### Manual Build
+### Basic Commands
 
-1. **Install MUSL target** (one-time setup):
-   ```bash
-   rustup target add x86_64-unknown-linux-musl
-   ```
+Inside the development container, you can use standard Cargo commands:
 
-2. **Build the binary**:
-   ```bash
-   cargo build --release --target x86_64-unknown-linux-musl
-   ```
+```bash
+# Create a new project
+cargo new myapp
+cd myapp
 
-3. **Verify the binary**:
-   ```bash
-   # Check that it's a static binary
-   file target/x86_64-unknown-linux-musl/release/proxmox-vm-manager
-   
-   # Should show: "statically linked"
-   ldd target/x86_64-unknown-linux-musl/release/proxmox-vm-manager
-   ```
+# Build the project
+cargo build
+
+# Run the project
+cargo run
+
+# Run tests
+cargo test
+
+# Check for warnings
+cargo check
+
+# Format code
+cargo fmt
+
+# Check code style
+cargo clippy
+```
+
+## Building for Production
+
+### Building a Release Binary
+
+To build an optimized release binary:
+
+```bash
+# Build in release mode
+./docker/run.sh build --release
+
+# The binary will be available at:
+# target/release/your-binary-name
+
+# To build a static MUSL binary (fully static, no dependencies):
+./docker/run.sh musl
+```
 
 ## Development Workflow
 
-### Using Docker (Recommended)
+### Using VSCode with Remote-Containers
 
-1. Start the development container:
-   ```bash
-   ./docker/run.sh dev
-   ```
-   This gives you an interactive shell with all dependencies installed.
+1. Install the "Remote - Containers" extension in VSCode
+2. Open the command palette (Ctrl+Shift+P) and select "Remote-Containers: Reopen in Container"
+3. VSCode will build the container and attach to it
+4. Install the "rust-analyzer" extension in the container when prompted
 
-2. Inside the container, you can:
-   ```bash
-   # Run tests
-   cargo test
-   
-   # Build in debug mode
+### Using Cargo Watch
+
+The development container includes `cargo-watch` for automatic rebuilding:
+
+```bash
+# Watch for changes and run tests
+cargo watch -x test
+
+# Watch for changes and run the application
+cargo watch -x run
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Permission Issues**
+   - If you get permission errors, try running:
+     ```bash
+     chmod +x docker/run.sh
+     ```
+
+2. **Container Not Starting**
+   - Make sure Docker is running
+   - Check for any error messages when running `docker ps -a`
+
+3. **Rust Tools Not Found**
+   - Try rebuilding the container: `docker-compose build`
+   - Check that the Rust toolchain is installed: `rustc --version`
+
+## Customization
+
+### Adding Dependencies
+
+To add system dependencies, edit the `Dockerfile` and add them to the `apt-get install` command.
+
+For Rust dependencies, add them to your `Cargo.toml` file as usual.
+
+### Extending the Environment
+
+You can customize the development environment by modifying:
+- `Dockerfile` - For system-level dependencies and configuration
+- `docker-compose.yml` - For container configuration and volume mounts
+- `.devcontainer/devcontainer.json` - For VSCode-specific settings
    cargo build
    
    # Build for release
