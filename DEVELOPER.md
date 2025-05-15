@@ -1,74 +1,46 @@
-# Rust Docker Development Guide
+# Rust Development Environment Guide
 
-This guide provides detailed information about the Rust Docker development environment and how to use it effectively.
+This document provides comprehensive documentation for the Rust Docker development environment.
+
+## Table of Contents
+
+- [Development Container](#development-container)
+- [Getting Started](#getting-started)
+- [Development Workflow](#development-workflow)
+- [Building and Running](#building-and-running)
+- [Testing](#testing)
+- [Advanced Usage](#advanced-usage)
+- [Troubleshooting](#troubleshooting)
+- [Customization](#customization)
 
 ## Development Container
 
-The development container is based on the official Rust Docker image and includes:
-- Latest stable Rust toolchain
-- Cargo package manager
+The development container includes everything needed for Rust development:
+
+- Latest stable Rust toolchain and Cargo
 - Common development tools (git, vim, curl, etc.)
 - Rust-analyzer for IDE support
 - Cargo watch for automatic rebuilding
+- Debugging tools
 
 ## Getting Started
+
+### Prerequisites
+
+- Docker installed on your system
+- Basic knowledge of Docker and Rust
 
 ### Starting the Development Environment
 
 ```bash
 # Start the development container
 ./docker/run.sh dev
-
-# This will give you a shell inside the container with:
-# - Your source code mounted at /workspace
-# - All Rust tools available in PATH
-# - Proper file permissions for your user
 ```
 
-### Basic Commands
-
-Inside the development container, you can use standard Cargo commands:
-
-```bash
-# Create a new project
-cargo new myapp
-cd myapp
-
-# Build the project
-cargo build
-
-# Run the project
-cargo run
-
-# Run tests
-cargo test
-
-# Check for warnings
-cargo check
-
-# Format code
-cargo fmt
-
-# Check code style
-cargo clippy
-```
-
-## Building for Production
-
-### Building a Release Binary
-
-To build an optimized release binary:
-
-```bash
-# Build in release mode
-./docker/run.sh build --release
-
-# The binary will be available at:
-# target/release/your-binary-name
-
-# To build a static MUSL binary (fully static, no dependencies):
-./docker/run.sh musl
-```
+This will give you an interactive shell inside the container with:
+- Your source code mounted at `/workspace`
+- All Rust tools available in PATH
+- Proper file permissions for your user
 
 ## Development Workflow
 
@@ -81,7 +53,7 @@ To build an optimized release binary:
 
 ### Using Cargo Watch
 
-The development container includes `cargo-watch` for automatic rebuilding:
+For automatic rebuilding:
 
 ```bash
 # Watch for changes and run tests
@@ -91,38 +63,127 @@ cargo watch -x test
 cargo watch -x run
 ```
 
+## Building and Running
+
+### Development Build
+
+```bash
+# Build in debug mode (faster compilation)
+./docker/run.sh build
+
+# The binary will be available at:
+# target/debug/your-app-name
+```
+
+### Release Build
+
+```bash
+# Build with optimizations
+./docker/run.sh build --release
+
+# The binary will be available at:
+# target/release/your-app-name
+```
+
+### Static MUSL Build
+
+To create a fully static binary with MUSL:
+
+```bash
+# Build a static MUSL binary
+./docker/run.sh musl
+
+# The binary will be available at:
+# target/x86_64-unknown-linux-musl/release/your-app-name
+```
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+./docker/run.sh test
+
+# Run a specific test
+./docker/run.sh test test_name
+
+# Run tests with detailed output
+cargo test -- --nocapture
+```
+
+### Code Quality
+
+```bash
+# Format code
+cargo fmt
+
+# Check code style
+cargo clippy
+
+# Check for unused dependencies
+cargo udeps
+```
+
+## Advanced Usage
+
+### Docker Compose
+
+You can use Docker Compose to manage the development environment:
+
+```bash
+# Start the development environment
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the environment
+docker-compose down
+```
+
+### Environment Variables
+
+You can customize the environment using these variables:
+
+- `RUST_LOG`: Set the logging level (e.g., `debug`, `info`, `warn`, `error`)
+- `RUST_BACKTRACE`: Enable backtraces for better error reporting
+
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Permission Issues**
-   - If you get permission errors, try running:
-     ```bash
-     chmod +x docker/run.sh
-     ```
+   ```bash
+   chmod +x docker/run.sh
+   ```
 
 2. **Container Not Starting**
-   - Make sure Docker is running
-   - Check for any error messages when running `docker ps -a`
+   - Ensure Docker is running
+   - Check logs: `docker-compose logs`
+   - Try rebuilding: `docker-compose build --no-cache`
 
 3. **Rust Tools Not Found**
-   - Try rebuilding the container: `docker-compose build`
-   - Check that the Rust toolchain is installed: `rustc --version`
+   - Rebuild the container: `docker-compose build`
+   - Check Rust installation: `rustc --version`
 
 ## Customization
 
-### Adding Dependencies
+### Adding System Dependencies
 
-To add system dependencies, edit the `Dockerfile` and add them to the `apt-get install` command.
+Edit the `Dockerfile` and add packages to the `apt-get install` command.
 
-For Rust dependencies, add them to your `Cargo.toml` file as usual.
+### Adding Rust Dependencies
+
+Add them to your `Cargo.toml` file as usual.
 
 ### Extending the Environment
 
-You can customize the development environment by modifying:
-- `Dockerfile` - For system-level dependencies and configuration
-- `docker-compose.yml` - For container configuration and volume mounts
-- `.devcontainer/devcontainer.json` - For VSCode-specific settings
+Customize these files as needed:
+
+- `Dockerfile`: System-level dependencies and configuration
+- `docker-compose.yml`: Container configuration and volume mounts
+- `.devcontainer/devcontainer.json`: VSCode-specific settings
    cargo build
    
    # Build for release
