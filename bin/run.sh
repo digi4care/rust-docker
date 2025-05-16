@@ -227,12 +227,27 @@ run_command() {
 
 # Function to build the application
 build() {
-    local profile="--release"
-    if [ "$#" -gt 0 ] && [ "$1" = "--debug" ]; then
-        profile=""
+    echo "🔧 Building application (release)..."
+    
+    # Ensure volumes exist
+    if ! ensure_volumes; then
+        return 1
     fi
-    echo -e "🔧 Building application ${profile:+(${profile#--})}..."
-    run_command cargo build ${profile}
+    
+    # Run the build in the container
+    if docker run --rm \
+        -v "${PROJECT_ROOT}:/app" \
+        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+        -w /app \
+        -e RUST_BACKTRACE=1 \
+        rust:latest \
+        cargo build --release; then
+        echo -e "\n✅ Build completed successfully!"
+    else
+        echo -e "\n❌ Build failed - check the output above for details" >&2
+        return 1
+    fi
 }
 
 # Function to run tests
