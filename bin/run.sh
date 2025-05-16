@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -euo pipefail
 
 # Determine the script directory
@@ -27,8 +28,21 @@ find_project_root() {
     echo "$PWD"  # Fallback to current directory if no Cargo.toml found
 }
 
+# Check for source files in the project
+check_source_files() {
+    if [ -d "src" ] || [ -f "src/main.rs" ] || [ -f "src/lib.rs" ]; then
+        return 0
+    fi
+
+    echo -e "\n❌ Fout: Geen bronbestanden gevonden in de huidige map"
+    echo -e "   Dit script moet worden uitgevoerd in een map met een Rust project."
+    echo -e "   Zorg voor een 'src/main.rs' of 'src/lib.rs' bestand of voer dit uit in een projectmap.\n"
+    return 1
+}
+
 # Initialize project variables
 init_project() {
+    local check_source="${1:-}"  # Make parameter optional with default empty value
     PROJECT_ROOT="$(find_project_root)"
     cd "$PROJECT_ROOT" || exit 1
 
@@ -42,12 +56,64 @@ init_project() {
     IMAGE_NAME="rust-dev-utility"
     CONTAINER_NAME="${PACKAGE_NAME}-container"
     VOLUME_NAME="${PWD##*/}-rust-cache"
+
+    # Check for source files in the project root if requested
+    if [ "$check_source" = "check" ] && ! check_source_files; then
+        exit 1
+    fi
 }
 
-# Initialize project variables
-init_project
+# Show help if no arguments are provided
+show_help() {
+    cat << EOF
 
-# Function to ensure volumes exist
+Gebruik: $(basename "$0") [COMMAND] [OPTIES]
+
+Een hulpprogramma voor het ontwikkelen van Rust projecten in een Docker container.
+
+Commands:
+    dev [VERSION]   Start een ontwikkelcontainer met Rust VERSION (standaard: latest)
+    build           Bouw het project in release modus
+    build --debug   Bouw het project in debug modus
+    musl            Bouw een statische binary met MUSL
+    test            Voer tests uit
+    run             Voer de applicatie uit
+    shell           Open een shell in de container
+    clean           Verwijder build artifacts en caches
+    help, --help    Toon deze hulp
+
+Voorbeelden:
+    # Start een ontwikkelcontainer met de nieuwste Rust versie
+    $0 dev
+
+    # Bouw het project in release modus
+    $0 build
+
+    # Bouw een statische binary met MUSL
+    $0 musl
+
+    # Start een ontwikkelcontainer met een specifieke Rust versie
+    $0 dev 1.70.0
+
+    # Bouw het project in release modus
+    $0 build
+
+EOF
+}
+
+# Initialize project with source check for non-help commands
+if [ "$#" -eq 0 ]; then
+    show_help
+    exit 0
+elif [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ "$1" = "help" ]; then
+    show_help
+    exit 0
+else
+    # Only check for source files if it's not a help command
+    init_project check
+fi
+
+# Function to ensure volumes exist and have correct permissions
 ensure_volumes() {
     # Create volume for Rust cache if it doesn't exist
     if ! docker volume inspect "${VOLUME_NAME}-cargo" >/dev/null 2>&1; then
@@ -56,6 +122,11 @@ ensure_volumes() {
             echo -e "❌ Failed to create volume ${VOLUME_NAME}-cargo" >&2
             return 1
         fi
+
+        # Set correct permissions for new volume
+        echo -e "🔧 Setting permissions for ${VOLUME_NAME}-cargo..."
+        docker run --rm -v "${VOLUME_NAME}-cargo:/cargo" busybox \
+            sh -c "mkdir -p /cargo/registry /cargo/git && chown -R 1000:1000 /cargo"
     fi
 
     # Create volume for Rust toolchain
@@ -65,6 +136,11 @@ ensure_volumes() {
             echo -e "❌ Failed to create volume ${VOLUME_NAME}-rustup" >&2
             return 1
         fi
+
+        # Set correct permissions for new volume
+        echo -e "🔧 Setting permissions for ${VOLUME_NAME}-rustup..."
+        docker run --rm -v "${VOLUME_NAME}-rustup:/rustup" busybox \
+            sh -c "chown -R 1000:1000 /rustup"
     fi
 
     return 0
@@ -95,7 +171,15 @@ dev() {
     local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
     echo -e "👨‍💻 Starting development container with Rust ${rust_version}..."
 
-    ensure_volumes
+    # Check for source files first
+    if ! check_source_files; then
+        return 1
+    fi
+
+    # Ensure volumes exist
+    if ! ensure_volumes; then
+        return 1
+    fi
 
     docker run -it --rm \
         --name "${CONTAINER_NAME}" \
@@ -109,16 +193,24 @@ dev() {
         cargo watch -x "build --all-features" -x run
 }
 
+
+
 # Function to run a command in the container
 run_command() {
     if ! ensure_volumes; then
         return 1
     fi
 
+    if ! check_source_files; then
+        return 1
+    fi
+
     local cmd=("$@")
     echo -e "🚀 Running command: ${cmd[*]}"
 
+    # First try running as root to ensure we have permissions
     if ! docker run -it --rm \
+        --user root \
         -v "${PWD}:/app" \
         -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
         -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
@@ -126,7 +218,8 @@ run_command() {
         -e RUST_BACKTRACE=1 \
         -e RUST_LOG=info \
         "${IMAGE_NAME}" \
-        "${cmd[@]}"; then
+        sh -c "chown -R 1000:1000 /usr/local/cargo /usr/local/rustup && ${cmd[*]}"; then
+
         echo -e "❌ Command failed" >&2
         return 1
     fi
@@ -199,98 +292,130 @@ run() {
 }
 
 # Function to create a MUSL build
-
-# Function to create a MUSL build
 musl_build() {
     local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
     echo "🔨 Building MUSL static binary with Rust ${rust_version}..."
 
-    # Create a volume for Rust cache if it doesn't exist
-    if ! docker volume inspect rust_cache >/dev/null 2>&1; then
-        echo "Creating rust_cache volume..."
-        docker volume create --name rust_cache
+    # Check for source files first
+    if ! check_source_files; then
+        return 1
     fi
 
-    # Create a volume for apt cache
-    if ! docker volume inspect apt_cache >/dev/null 2>&1; then
-        echo "Creating apt_cache volume..."
-        docker volume create --name apt_cache
+    # Ensure volumes exist
+    if ! ensure_volumes; then
+        return 1
     fi
 
-    # Create a volume for cargo registry
-    if ! docker volume inspect cargo_registry >/dev/null 2>&1; then
-        echo "Creating cargo_registry volume..."
-        docker volume create --name cargo_registry
-    fi
+    # Create target directory with correct permissions
+    mkdir -p "${PROJECT_ROOT}/target"
+    chmod 777 "${PROJECT_ROOT}/target"
 
-    docker run --rm -it \
-        -v "$PROJECT_ROOT:/app" \
-        -v rust_cache:/root/.cache \
-        -v cargo_registry:/usr/local/cargo/registry \
-        -v apt_cache:/var/cache/apt \
-        -v apt_cache:/var/lib/apt/lists \
+    # Create a temporary script file
+    local temp_script
+    temp_script=$(mktemp)
+
+    # Ensure the temp file is removed on exit
+    trap 'rm -f "$temp_script"' EXIT
+
+    # Write the build script to the temporary file
+    cat > "$temp_script" << 'EOF_BUILD_SCRIPT'
+#!/bin/sh
+set -e
+
+# Install required packages
+echo "Updating package lists..."
+apt-get update -qq
+
+# Install musl-tools if not already installed
+if ! command -v musl-gcc >/dev/null 2>&1; then
+    echo "Installing musl-tools..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        musl-tools \
+        musl-dev
+fi
+
+# Add MUSL target if not already added
+if ! rustup target list | grep -q "x86_64-unknown-linux-musl (installed)"; then
+    echo "Adding MUSL target..."
+    rustup target add x86_64-unknown-linux-musl
+fi
+
+echo "Building application..."
+
+# Show current directory and contents before build
+echo -e "\n📂 Current directory before build:"
+pwd
+ls -la
+
+# Get package name from Cargo.toml
+local cargo_toml="/app/Cargo.toml"
+if [ ! -f "${cargo_toml}" ]; then
+    echo -e '❌ Error: Cargo.toml not found in /app' >&2
+    exit 1
+fi
+
+local package_name
+package_name=$(grep -m 1 '^name = ' "${cargo_toml}" | cut -d'"' -f2)
+if [ -z "${package_name}" ]; then
+    echo -e '❌ Error: Could not determine package name from Cargo.toml' >&2
+    exit 1
+fi
+
+# Build the application
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Find the built binary
+local binary_path="/app/target/x86_64-unknown-linux-musl/release/${package_name}"
+
+# Check if binary exists and is executable
+if [ ! -f "$binary_path" ] || [ ! -x "$binary_path" ]; then
+    echo -e "❌ Error: Binary exists but is not executable or accessible" >&2
+    ls -la "$(dirname "$binary_path")" >&2
+    exit 1
+fi
+
+echo -e "\n✅ Build successful!"
+echo -e "📦 Binary location: $binary_path"
+EOF_BUILD_SCRIPT
+
+    # Make the script executable
+    chmod +x "$temp_script"
+
+    # Run the build in the container as root
+    if ! docker run --rm -it \
+        --user root \
+        -v "${PROJECT_ROOT}:/app" \
+        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
         -w /app \
         -e RUSTFLAGS='-C target-feature=+crt-static' \
-        -e CARGO_HOME=/usr/local/cargo \
-        "rust:${rust_version}" \
-        bash -c "
-            # Install musl-tools if not already installed
-            if ! command -v musl-gcc >/dev/null 2>&1; then
-                echo 'Installing musl-tools...' && \
-                apt-get update -qq && \
-                apt-get install -y --no-install-recommends musl-tools
-            fi && \
+        -e RUST_BACKTRACE=1 \
+        "${IMAGE_NAME}" \
+        /bin/sh -c "cat > /tmp/build.sh && chmod +x /tmp/build.sh && /tmp/build.sh" < "$temp_script"; then
+        # If we get here, the build failed
+        echo -e "❌ Build failed - check the output above for details" >&2
+        return 1
+    fi
 
-            # Add MUSL target if not already added
-            if ! rustup target list | grep -q 'x86_64-unknown-linux-musl (installed)'; then
-                echo 'Adding MUSL target...' && \
-                rustup target add x86_64-unknown-linux-musl
-            fi && \
+    # If we get here, the build was successful
+    echo -e "\n✅ MUSL build completed successfully!"
+    echo -e "📦 The static binary is available at: ${PROJECT_ROOT}/target/x86_64-unknown-linux-musl/release/"
 
-            echo 'Building application...' && \
-            cargo build --release --target x86_64-unknown-linux-musl && \
-            echo -e '\\n✅ Build successful! Binary location:' && \
-            ls -lh /app/target/x86_64-unknown-linux-musl/release/${PACKAGE_NAME}
-        "
-}
+    # Show the binary information if it exists
+    local binary_path
+    binary_path="${PROJECT_ROOT}/target/x86_64-unknown-linux-musl/release/$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)"
+    if [ -f "$binary_path" ]; then
+        echo -e "\n📄 Binary information:"
+        file "$binary_path"
+        echo -e "📏 Size: $(du -h "$binary_path" | awk '{print $1}')"
 
-# Show help
-show_help() {
-    cat << EOF
-Usage: $0 <command> [options]
-
-Commands:
-  dev [rust-version]    Start development server with hot-reload
-  build [--debug|--release]  Build the application (default: --release)
-  run [args...]        Run the application with optional arguments
-  test                 Run tests
-  check                Check the code
-  clippy               Run clippy
-  fmt                  Format the code
-  clean                Clean the project
-  shell                Enter a shell in the container
-  help                 Show this help message
-
-Examples:
-  $0 dev                 # Start dev server with default Rust version
-  $0 build --debug      # Build in debug mode
-  $0 test              # Run tests
-  $0 shell             # Enter container shell
-  $0 help              # Show this help message
-
-Environment variables:
-  RUST_BACKTRACE=1  Enable backtraces on panic
-  RUST_LOG=info     Set log level (error, warn, info, debug, trace)
-
-Tip: Add an alias to your shell config:
-  echo 'alias rustdev="path/to/run.sh"' >> ~/.zshrc  # or ~/.bashrc
-  source ~/.zshrc  # or ~/.bashrc
-
-  Then use it in any Rust project:
-  $ rustdev build
-  $ rustdev test
-  $ rustdev shell
-EOF
+        # Check if the binary is static
+        if ldd "$binary_path" 2>/dev/null; then
+            echo -e "\n⚠️  Warning: Binary has dynamic dependencies (not fully static)"
+        else
+            echo -e "\n✅ No dynamic dependencies found (fully static binary)"
+        fi
+    fi
 }
 
 # Main script
@@ -306,6 +431,9 @@ main() {
         build)
             shift
             build "$@"
+            ;;
+        musl)
+            musl_build "${2:-}"
             ;;
         run)
             shift
