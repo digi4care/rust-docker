@@ -15,6 +15,19 @@ declare IMAGE_NAME
 declare CONTAINER_NAME
 declare VOLUME_NAME
 
+# Version information
+declare VERSION="1.0.0"
+declare AUTHOR="Chris Engelhard <chris@chrisengelhard.nl>"
+declare DESCRIPTION="Rust Development Utility - A Docker-based development environment for Rust projects"
+
+# Display header
+show_header() {
+    echo "Rust Development Utility v${VERSION}"
+    echo "├── Author: ${AUTHOR}"
+    echo "└── ${DESCRIPTION}"
+    echo ""
+}
+
 # Find the project root (current directory or parent with Cargo.toml)
 find_project_root() {
     local dir="$PWD"  # Always start from current directory
@@ -65,6 +78,7 @@ init_project() {
 
 # Show help if no arguments are provided
 show_help() {
+    show_header
     cat << EOF
 
 Usage: $(basename "$0") [COMMAND] [OPTIONS]
@@ -183,9 +197,9 @@ dev() {
 
     # Use the specified Rust version or default to 'latest'
     local rust_image="rust:${rust_version}"
-    
+
     echo -e "🐳 Using Docker image: ${rust_image}"
-    
+
     docker run -it --rm \
         --name "${CONTAINER_NAME}" \
         -v "${PWD}:/app" \
@@ -196,12 +210,12 @@ dev() {
         -e RUST_LOG=info \
         "${rust_image}" \
         sh -c "
-            rustc --version && 
-            cargo --version && 
+            rustc --version &&
+            cargo --version &&
             if ! command -v cargo-watch >/dev/null 2>&1; then
-                echo 'Installing cargo-watch...' && 
+                echo 'Installing cargo-watch...' &&
                 cargo install cargo-watch
-            fi && 
+            fi &&
             cargo watch -x 'build --all-features' -x run
         "
 }
@@ -241,12 +255,12 @@ run_command() {
 # Function to build the application
 build() {
     echo "🔧 Building application (release)..."
-    
+
     # Ensure volumes exist
     if ! ensure_volumes; then
         return 1
     fi
-    
+
     # Run the build in the container
     if docker run --rm \
         -v "${PROJECT_ROOT}:/app" \
@@ -266,12 +280,12 @@ build() {
 # Function to run tests
 test() {
     echo -e "🧪 Running tests..."
-    
+
     # Ensure volumes exist
     if ! ensure_volumes; then
         return 1
     fi
-    
+
     # Run tests in the container
     if docker run --rm \
         -v "${PROJECT_ROOT}:/app" \
@@ -309,7 +323,7 @@ fmt() {
 # Function to clean
 clean() {
     echo "🧹 Cleaning project and Docker resources..."
-    
+
     # Run cargo clean in the container
     if docker run --rm \
         -v "${PROJECT_ROOT}:/app" \
@@ -323,11 +337,11 @@ clean() {
         echo -e "\n❌ Failed to clean project" >&2
         return 1
     fi
-    
+
     # Clean up Docker builder cache
     echo -e "\n🧹 Cleaning Docker builder cache..."
     docker builder prune -f
-    
+
     echo -e "\n✅ Cleanup complete!"
 }
 
@@ -335,12 +349,12 @@ clean() {
 shell() {
     echo "Entering container shell..."
     echo "Type 'exit' to leave the container shell"
-    
+
     # Ensure volumes exist
     if ! ensure_volumes; then
         return 1
     fi
-    
+
     # Run an interactive shell in the container
     docker run -it --rm \
         -v "${PROJECT_ROOT}:/app" \
@@ -355,16 +369,16 @@ shell() {
 # Function to run the application
 run() {
     echo "🚀 Running application..."
-    
+
     # Ensure volumes exist
     if ! ensure_volumes; then
         return 1
     fi
-    
+
     # Get binary name from Cargo.toml
     local binary_name
     binary_name=$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)
-    
+
     # Run the application in the container
     docker run --rm \
         -it \
@@ -409,7 +423,7 @@ musl_build() {
 
     # Create docker directory if it doesn't exist
     mkdir -p "${PROJECT_ROOT}/docker"
-    
+
     # Copy the build script to the project directory
     cp "$build_script_path" "${PROJECT_ROOT}/docker/"
 
@@ -423,20 +437,20 @@ musl_build() {
         -e RUST_BACKTRACE=1 \
         rust:latest \
         /bin/sh -c "chmod +x /app/docker/build-musl.sh && /app/docker/build-musl.sh"; then
-        
+
         # If we get here, the build was successful
         local binary_name
         binary_name=$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)
         local binary_path="${PROJECT_ROOT}/target/x86_64-unknown-linux-musl/release/${binary_name}"
-        
+
         echo -e "\n✅ MUSL build completed successfully!"
         echo -e "📦 The static binary is available at: ${binary_path}"
-        
+
         if [ -f "$binary_path" ]; then
             echo -e "\n📄 Binary information:"
             file "$binary_path"
             echo -e "📏 Size: $(du -h "$binary_path" | awk '{print $1}')"
-            
+
             # Check if the binary is static
             if ldd "$binary_path" 2>/dev/null; then
                 echo -e "\n⚠️  Warning: Binary has dynamic dependencies (not fully static)"
