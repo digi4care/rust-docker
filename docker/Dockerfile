@@ -1,48 +1,52 @@
-# First stage: Builder with MUSL support
+# Use the official Rust image as the base image
 ARG RUST_VERSION=latest
-FROM rust:${RUST_VERSION} AS builder
+FROM rust:${RUST_VERSION}
 
-# Install MUSL tools and target
+# Install common development tools and utilities
 RUN apt-get update && \
-    apt-get install -y musl-tools musl-dev && \
-    rustup target add x86_64-unknown-linux-musl
-
-# Create a new empty shell project
-RUN USER=root cargo new --bin app
-WORKDIR /app
-
-# Copy manifest files
-COPY ["Cargo.toml", "Cargo.lock", "./"]
-
-# Build only the dependencies with MUSL target (cached as long as Cargo.toml doesn't change)
-RUN mkdir -p ./src && \
-    echo 'fn main() { println!("Dummy main") }' > ./src/main.rs && \
-    cargo build --release --target x86_64-unknown-linux-musl && \
-    rm -f target/x86_64-unknown-linux-musl/release/deps/${PACKAGE_NAME}*
-
-# Create src directory and default main.rs
-RUN mkdir -p src && \
-    echo 'fn main() { println!("Dummy main") }' > src/main.rs
-
-# Copy source files if they exist
-COPY src/ ./src/
-
-# Build the application with MUSL target
-RUN cargo build --release --target x86_64-unknown-linux-musl
-
-# Second stage: Runtime image
-FROM debian:bookworm-slim
-
-# Install only ca-certificates (no libssl needed for MUSL build)
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
+    apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    wget \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    musl-tools \
+    musl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the MUSL binary from the builder stage
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/${PACKAGE_NAME} /usr/local/bin/
+# Install common Rust targets
+RUN rustup target add wasm32-unknown-unknown \
+    && rustup target add x86_64-unknown-linux-musl \
+    && rustup target add x86_64-unknown-linux-gnu \
+    && rustup component add rustfmt \
+    && rustup component add clippy \
+    && rustup component add rust-src \
+    && rustup component add rust-analysis
+
+# Install cargo-edit for Cargo.toml editing
+RUN cargo install cargo-edit \
+    && cargo install cargo-watch \
+    && cargo install cargo-audit \
+    && cargo install cargo-outdated \
+    && cargo install cargo-udeps --locked \
+    && cargo install cargo-tarpaulin
+
+# Install wasm-pack for WebAssembly
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+# Create a non-root user
+RUN useradd -m -s /bin/bash rustdev
 
 # Set the working directory
 WORKDIR /app
 
-# Run the application
+# Switch to non-root user
+USER rustdev
+
+# Set environment variables
+ENV RUST_BACKTRACE=1
+ENV RUST_LOG=info
+
+# Default command
 CMD ["/bin/bash"]
