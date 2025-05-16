@@ -13,6 +13,117 @@ This document provides comprehensive documentation for the Rust Docker developme
 - [Troubleshooting](#troubleshooting)
 - [Customization](#customization)
 
+## Working with Specific Rust Versions
+
+You can build and run your project with specific Rust versions using the following commands:
+
+### Building with a specific Rust version
+
+```bash
+# Build the builder image with a specific Rust version (e.g., 1.75.0)
+./bin/run.sh build_builder 1.75.0
+
+# Then build your project
+./bin/run.sh build
+
+# Or for a release build
+./bin/run.sh build --release
+```
+
+### Development with a specific Rust version
+
+```bash
+# Start a development container with a specific Rust version
+./bin/run.sh dev 1.75.0
+```
+
+### Using the latest Rust version
+
+If you don't specify a version, the latest stable version will be used:
+
+```bash
+# Uses the latest Rust version
+./bin/run.sh dev
+./bin/run.sh build
+```
+
+### Available Rust versions
+
+You can use any version available in the official Rust Docker images. Check the [Rust Docker Hub](https://hub.docker.com/_/rust) for available tags.
+
+## Available Commands
+
+### Development
+
+```bash
+# Start development server with hot-reload
+./bin/run.sh dev [rust-version]
+
+# Enter a shell in the container
+./bin/run.sh shell
+```
+
+### Building
+
+```bash
+# Build the application (default: --release)
+./bin/run.sh build [--debug|--release]
+
+# Build with MUSL target (statically linked binary)
+./bin/run.sh musl_build [rust-version]
+```
+
+### Code Quality
+
+```bash
+# Run tests
+./bin/run.sh test
+
+# Run clippy
+./bin/run.sh clippy
+
+# Check code formatting
+./bin/run.sh fmt
+
+# Run cargo check
+./bin/run.sh check
+```
+
+### Maintenance
+
+```bash
+# Clean build artifacts and Docker resources
+./bin/run.sh clean
+
+# Build the builder image with specific Rust version
+./bin/run.sh build_builder [rust-version]
+
+# Build the runtime image
+./bin/run.sh build_runtime
+```
+
+### Running
+
+```bash
+# Run the application
+./bin/run.sh run [args...]
+
+# Run any cargo command
+./bin/run.sh cargo [command] [args...]
+```
+
+## Environment Variables
+
+- `RUST_BACKTRACE=1`: Enable backtraces on panic
+- `RUST_LOG=info`: Set log level (error, warn, info, debug, trace)
+
+## Tips
+
+- Use `--debug` flag with build to create a debug build
+- All commands can be run from any subdirectory of your project
+- Docker volumes are used for caching to speed up builds
+- The container automatically detects your project's root directory by looking for Cargo.toml
+
 ## Development Container
 
 The development container includes everything needed for Rust development:
