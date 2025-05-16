@@ -4,7 +4,7 @@ FROM rust:${RUST_VERSION}
 
 # Install common development tools and utilities
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git \
     curl \
     wget \
@@ -13,6 +13,16 @@ RUN apt-get update && \
     libssl-dev \
     musl-tools \
     musl-dev \
+    musl \
+    musl-utils \
+    musl-libc \
+    musl-libc-dev \
+    musl-tools \
+    gcc-musl \
+    g++-musl \
+    file \
+    binutils \
+    libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install common Rust targets

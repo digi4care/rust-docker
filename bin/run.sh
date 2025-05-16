@@ -310,111 +310,56 @@ musl_build() {
     mkdir -p "${PROJECT_ROOT}/target"
     chmod 777 "${PROJECT_ROOT}/target"
 
-    # Create a temporary script file
-    local temp_script
-    temp_script=$(mktemp)
+    # Check if build-musl.sh exists
+    local build_script_path="${SCRIPT_DIR}/../docker/build-musl.sh"
+    if [ ! -f "$build_script_path" ]; then
+        echo "❌ Error: build-musl.sh not found at $build_script_path" >&2
+        return 1
+    fi
 
-    # Ensure the temp file is removed on exit
-    trap 'rm -f "$temp_script"' EXIT
+    # Make sure the script is executable
+    chmod +x "$build_script_path"
 
-    # Write the build script to the temporary file
-    cat > "$temp_script" << 'EOF_BUILD_SCRIPT'
-#!/bin/sh
-set -e
+    # Create docker directory if it doesn't exist
+    mkdir -p "${PROJECT_ROOT}/docker"
+    
+    # Copy the build script to the project directory
+    cp "$build_script_path" "${PROJECT_ROOT}/docker/"
 
-# Install required packages
-echo "Updating package lists..."
-apt-get update -qq
-
-# Install musl-tools if not already installed
-if ! command -v musl-gcc >/dev/null 2>&1; then
-    echo "Installing musl-tools..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        musl-tools \
-        musl-dev
-fi
-
-# Add MUSL target if not already added
-if ! rustup target list | grep -q "x86_64-unknown-linux-musl (installed)"; then
-    echo "Adding MUSL target..."
-    rustup target add x86_64-unknown-linux-musl
-fi
-
-echo "Building application..."
-
-# Show current directory and contents before build
-echo -e "\n📂 Current directory before build:"
-pwd
-ls -la
-
-# Get package name from Cargo.toml
-local cargo_toml="/app/Cargo.toml"
-if [ ! -f "${cargo_toml}" ]; then
-    echo -e '❌ Error: Cargo.toml not found in /app' >&2
-    exit 1
-fi
-
-local package_name
-package_name=$(grep -m 1 '^name = ' "${cargo_toml}" | cut -d'"' -f2)
-if [ -z "${package_name}" ]; then
-    echo -e '❌ Error: Could not determine package name from Cargo.toml' >&2
-    exit 1
-fi
-
-# Build the application
-cargo build --release --target x86_64-unknown-linux-musl
-
-# Find the built binary
-local binary_path="/app/target/x86_64-unknown-linux-musl/release/${package_name}"
-
-# Check if binary exists and is executable
-if [ ! -f "$binary_path" ] || [ ! -x "$binary_path" ]; then
-    echo -e "❌ Error: Binary exists but is not executable or accessible" >&2
-    ls -la "$(dirname "$binary_path")" >&2
-    exit 1
-fi
-
-echo -e "\n✅ Build successful!"
-echo -e "📦 Binary location: $binary_path"
-EOF_BUILD_SCRIPT
-
-    # Make the script executable
-    chmod +x "$temp_script"
-
-    # Run the build in the container as root
-    if ! docker run --rm -it \
-        --user root \
+    # Run the build in the container
+    if docker run --rm \
         -v "${PROJECT_ROOT}:/app" \
         -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
         -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
         -w /app \
         -e RUSTFLAGS='-C target-feature=+crt-static' \
         -e RUST_BACKTRACE=1 \
-        "${IMAGE_NAME}" \
-        /bin/sh -c "cat > /tmp/build.sh && chmod +x /tmp/build.sh && /tmp/build.sh" < "$temp_script"; then
-        # If we get here, the build failed
-        echo -e "❌ Build failed - check the output above for details" >&2
-        return 1
-    fi
-
-    # If we get here, the build was successful
-    echo -e "\n✅ MUSL build completed successfully!"
-    echo -e "📦 The static binary is available at: ${PROJECT_ROOT}/target/x86_64-unknown-linux-musl/release/"
-
-    # Show the binary information if it exists
-    local binary_path
-    binary_path="${PROJECT_ROOT}/target/x86_64-unknown-linux-musl/release/$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)"
-    if [ -f "$binary_path" ]; then
-        echo -e "\n📄 Binary information:"
-        file "$binary_path"
-        echo -e "📏 Size: $(du -h "$binary_path" | awk '{print $1}')"
-
-        # Check if the binary is static
-        if ldd "$binary_path" 2>/dev/null; then
-            echo -e "\n⚠️  Warning: Binary has dynamic dependencies (not fully static)"
-        else
-            echo -e "\n✅ No dynamic dependencies found (fully static binary)"
+        rust:latest \
+        /bin/sh -c "chmod +x /app/docker/build-musl.sh && /app/docker/build-musl.sh"; then
+        
+        # If we get here, the build was successful
+        local binary_name
+        binary_name=$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)
+        local binary_path="${PROJECT_ROOT}/target/x86_64-unknown-linux-musl/release/${binary_name}"
+        
+        echo -e "\n✅ MUSL build completed successfully!"
+        echo -e "📦 The static binary is available at: ${binary_path}"
+        
+        if [ -f "$binary_path" ]; then
+            echo -e "\n📄 Binary information:"
+            file "$binary_path"
+            echo -e "📏 Size: $(du -h "$binary_path" | awk '{print $1}')"
+            
+            # Check if the binary is static
+            if ldd "$binary_path" 2>/dev/null; then
+                echo -e "\n⚠️  Warning: Binary has dynamic dependencies (not fully static)"
+            else
+                echo -e "\n✅ No dynamic dependencies found (fully static binary)"
+            fi
         fi
+    else
+        echo -e "\n❌ Build failed - check the output above for details" >&2
+        return 1
     fi
 }
 
