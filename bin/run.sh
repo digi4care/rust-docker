@@ -34,9 +34,9 @@ check_source_files() {
         return 0
     fi
 
-    echo -e "\n❌ Fout: Geen bronbestanden gevonden in de huidige map"
-    echo -e "   Dit script moet worden uitgevoerd in een map met een Rust project."
-    echo -e "   Zorg voor een 'src/main.rs' of 'src/lib.rs' bestand of voer dit uit in een projectmap.\n"
+    echo -e "\n❌ Error: No source files found in the current directory"
+    echo -e "   This script must be run in a directory with a Rust project."
+    echo -e "   Please ensure there is a 'src/main.rs' or 'src/lib.rs' file or run this in a project directory.\n"
     return 1
 }
 
@@ -67,35 +67,35 @@ init_project() {
 show_help() {
     cat << EOF
 
-Gebruik: $(basename "$0") [COMMAND] [OPTIES]
+Usage: $(basename "$0") [COMMAND] [OPTIONS]
 
-Een hulpprogramma voor het ontwikkelen van Rust projecten in een Docker container.
+A utility for developing Rust projects in a Docker container.
 
 Commands:
-    dev [VERSION]   Start een ontwikkelcontainer met Rust VERSION (standaard: latest)
-    build           Bouw het project in release modus
-    build --debug   Bouw het project in debug modus
-    musl            Bouw een statische binary met MUSL
-    test            Voer tests uit
-    run             Voer de applicatie uit
-    shell           Open een shell in de container
-    clean           Verwijder build artifacts en caches
-    help, --help    Toon deze hulp
+    dev [VERSION]   Start a development container with Rust VERSION (default: latest)
+    build           Build the project in release mode
+    build --debug   Build the project in debug mode
+    musl            Build a static binary with MUSL
+    test            Run tests
+    run             Run the application
+    shell           Open a shell in the container
+    clean           Remove build artifacts and caches
+    help, --help    Show this help message
 
-Voorbeelden:
-    # Start een ontwikkelcontainer met de nieuwste Rust versie
+Examples:
+    # Start a development container with the latest Rust version
     $0 dev
 
-    # Bouw het project in release modus
+    # Build the project in release mode
     $0 build
 
-    # Bouw een statische binary met MUSL
+    # Build a static binary with MUSL
     $0 musl
 
-    # Start een ontwikkelcontainer met een specifieke Rust versie
+    # Start a development container with a specific Rust version
     $0 dev 1.70.0
 
-    # Bouw het project in release modus
+    # Build the project in release mode
     $0 build
 
 EOF
