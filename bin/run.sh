@@ -307,7 +307,21 @@ clean() {
 shell() {
     echo "Entering container shell..."
     echo "Type 'exit' to leave the container shell"
-    run_command /bin/bash
+    
+    # Ensure volumes exist
+    if ! ensure_volumes; then
+        return 1
+    fi
+    
+    # Run an interactive shell in the container
+    docker run -it --rm \
+        -v "${PROJECT_ROOT}:/app" \
+        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+        -w /app \
+        -e RUST_BACKTRACE=1 \
+        rust:latest \
+        /bin/bash
 }
 
 # Function to run the application
