@@ -1,5 +1,6 @@
 # First stage: Builder with MUSL support
-FROM rust:latest AS builder
+ARG RUST_VERSION=latest
+FROM rust:${RUST_VERSION} AS builder
 
 # Install MUSL tools and target
 RUN apt-get update && \
@@ -17,14 +18,17 @@ COPY ["Cargo.toml", "Cargo.lock", "./"]
 RUN mkdir -p ./src && \
     echo 'fn main() { println!("Dummy main") }' > ./src/main.rs && \
     cargo build --release --target x86_64-unknown-linux-musl && \
-    rm -f target/x86_64-unknown-linux-musl/release/deps/proxmox_vm_manager*
+    rm -f target/x86_64-unknown-linux-musl/release/deps/${PACKAGE_NAME}*
 
-# Copy source files
-COPY src/ src/
+# Create src directory and default main.rs
+RUN mkdir -p src && \
+    echo 'fn main() { println!("Dummy main") }' > src/main.rs
 
-# Build the application with MUSL target (uses cached dependencies)
-RUN touch src/main.rs && \
-    cargo build --release --target x86_64-unknown-linux-musl
+# Copy source files if they exist
+COPY src/ ./src/
+
+# Build the application with MUSL target
+RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Second stage: Runtime image
 FROM debian:bookworm-slim
@@ -35,7 +39,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the MUSL binary from the builder stage
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/proxmox-vm-manager /usr/local/bin/
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/${PACKAGE_NAME} /usr/local/bin/
 
 # Set the working directory
 WORKDIR /app

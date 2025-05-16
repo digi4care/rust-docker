@@ -1,9 +1,9 @@
 [package]
-name = "my-app"
+name = "rust-dev-utility"
 version = "0.1.0"
 edition = "2024"
 authors = ["Chris Engelhard <chris@chrisengelhard.nl>"]
-description = "My Rust App"
+description = "A development utility for Rust projects"
 
 [dependencies]
 anyhow = "1.0"
