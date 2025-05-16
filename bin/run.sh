@@ -295,12 +295,27 @@ fmt() {
 
 # Function to clean
 clean() {
-    echo "Cleaning project and Docker resources..."
-    run_command cargo clean
-
-    # Clean up Docker resources
-    docker rmi -f "${IMAGE_NAME}" "${IMAGE_NAME}-builder" 2>/dev/null || true
+    echo "🧹 Cleaning project and Docker resources..."
+    
+    # Run cargo clean in the container
+    if docker run --rm \
+        -v "${PROJECT_ROOT}:/app" \
+        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+        -w /app \
+        rust:latest \
+        cargo clean; then
+        echo -e "\n✅ Project cleaned successfully!"
+    else
+        echo -e "\n❌ Failed to clean project" >&2
+        return 1
+    fi
+    
+    # Clean up Docker builder cache
+    echo -e "\n🧹 Cleaning Docker builder cache..."
     docker builder prune -f
+    
+    echo -e "\n✅ Cleanup complete!"
 }
 
 # Function to enter the container shell
