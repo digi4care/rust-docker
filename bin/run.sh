@@ -87,12 +87,12 @@ A utility for developing Rust projects in a Docker container.
 
 Commands:
     dev [VERSION]   Start a development container with Rust VERSION (default: latest)
-    build           Build the project in release mode
+    build [VERSION] Build the project in release mode with optional Rust VERSION
     build --debug   Build the project in debug mode
-    musl            Build a static binary with MUSL
-    test            Run tests
+    musl [VERSION]  Build a static binary with MUSL using optional Rust VERSION
+    test [VERSION]  Run tests with optional Rust VERSION
     run             Run the application
-    shell           Open a shell in the container
+    shell [VERSION] Open a shell in the container with optional Rust VERSION
     clean           Remove build artifacts and caches
     help, --help    Show this help message
 
@@ -254,32 +254,91 @@ run_command() {
 
 # Function to build the application
 build() {
-    echo "🔧 Building application (release)..."
+    local rust_version="latest"
+    local build_args=("--release")
+    local build_type="release"
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --debug)
+                build_args=()
+                build_type="debug"
+                shift
+                ;;
+            --release)
+                build_args=("--release")
+                build_type="release"
+                shift
+                ;;
+            *)
+                # Assume it's a version specifier
+                rust_version="$1"
+                shift
+                ;;
+        esac
+    done
+
+    echo "🔧 Building application (${build_type}) with Rust ${rust_version}..."
 
     # Ensure volumes exist
     if ! ensure_volumes; then
         return 1
     fi
 
-    # Run the build in the container
+    # Use the specified Rust version or default to 'latest'
+    local rust_image="rust:${rust_version}"
+
+    # Skip cleanup to avoid device busy errors
+    echo "ℹ️  Skipping cleanup to avoid device busy errors..."
+
+    # Run the build in the container with verbose output
+    echo "🏗️  Building with command: cargo build ${build_args[*]}"
+    echo "📦 Using image: ${rust_image}"
     if docker run --rm \
         -v "${PROJECT_ROOT}:/app" \
         -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
-        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+        -v "${VOLUME_NAME}-target:/app/target" \
         -w /app \
-        -e RUST_BACKTRACE=1 \
-        rust:latest \
-        cargo build --release; then
-        echo -e "\n✅ Build completed successfully!"
+        "${rust_image}" \
+        bash -c "set -x && cargo build ${build_args[*]} && ls -la target/${build_type}"; then
+
+        echo -e "\n✅ Build completed successfully with Rust ${rust_version}!"
+
+        # Verify the binary was created
+        local binary_name
+        binary_name=$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)
+
+        if ! docker run --rm \
+            -v "${VOLUME_NAME}-target:/app/target" \
+            busybox \
+            ls -la "/app/target/${build_type}/${binary_name}" 2>/dev/null; then
+            echo "❌ Error: Binary not found at /app/target/${build_type}/${binary_name}" >&2
+            return 1
+        fi
+
+        return 0
     else
-        echo -e "\n❌ Build failed - check the output above for details" >&2
+        echo -e "\n❌ Build failed with Rust ${rust_version}" >&2
+
+        # Show build logs
+        echo "\n📝 Build logs:"
+        docker run --rm \
+            -v "${VOLUME_NAME}-target:/app/target" \
+            busybox \
+            find /app/target -type f -name "*.log" -exec echo "=== {} ===" \; -exec cat {} \;
+
         return 1
     fi
 }
 
 # Function to run tests
 test() {
-    echo -e "🧪 Running tests..."
+    # First argument is the Rust version, rest are passed to cargo test
+    local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
+    shift  # Remove the version from arguments
+
+    echo -e "🧪 Running tests with Rust ${rust_version}..."
 
     # Ensure volumes exist
     if ! ensure_volumes; then
@@ -293,11 +352,11 @@ test() {
         -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
         -w /app \
         -e RUST_BACKTRACE=1 \
-        rust:latest \
-        cargo test -- --nocapture; then
-        echo -e "\n✅ Tests completed successfully!"
+        "rust:${rust_version}" \
+        cargo test "$@"; then
+        echo -e "\n✅ Tests completed successfully with Rust ${rust_version}!"
     else
-        echo -e "\n❌ Tests failed - check the output above for details" >&2
+        echo -e "\n❌ Tests failed with Rust ${rust_version}" >&2
         return 1
     fi
 }
@@ -340,61 +399,103 @@ clean() {
 
     # Clean up Docker builder cache
     echo -e "\n🧹 Cleaning Docker builder cache..."
-    docker builder prune -f
 
-    echo -e "\n✅ Cleanup complete!"
-}
+        echo -e "\n✅ Cleanup complete!"
+    }
 
-# Function to enter the container shell
-shell() {
-    echo "Entering container shell..."
-    echo "Type 'exit' to leave the container shell"
+    # Function to open a shell in the container
+    shell() {
+        # First argument is the Rust version
+        local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
+        shift  # Remove the version from arguments
 
-    # Ensure volumes exist
-    if ! ensure_volumes; then
-        return 1
-    fi
+        echo "Entering container shell with Rust ${rust_version}..."
+        echo "Type 'exit' to leave the container shell"
 
-    # Run an interactive shell in the container
-    docker run -it --rm \
-        -v "${PROJECT_ROOT}:/app" \
-        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
-        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
-        -w /app \
-        -e RUST_BACKTRACE=1 \
-        rust:latest \
-        /bin/bash
-}
+        # Ensure volumes exist
+        if ! ensure_volumes; then
+            return 1
+        fi
 
-# Function to run the application
-run() {
-    echo "🚀 Running application..."
+        # Run an interactive shell in the container
+        docker run -it --rm \
+            -v "${PROJECT_ROOT}:/app" \
+            -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+            -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+            -w /app \
+            -e RUST_BACKTRACE=1 \
+            "rust:${rust_version}" \
+            /bin/bash
+    }
 
-    # Ensure volumes exist
-    if ! ensure_volumes; then
-        return 1
-    fi
+    # Function to run the application
+    run() {
+        echo "🚀 Running application..."
 
-    # Get binary name from Cargo.toml
-    local binary_name
-    binary_name=$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)
+        # Ensure volumes exist
+        if ! ensure_volumes; then
+            return 1
+        fi
 
-    # Run the application in the container
-    docker run --rm \
-        -it \
-        -v "${PROJECT_ROOT}:/app" \
-        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
-        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
-        -w /app \
-        -e RUST_BACKTRACE=1 \
-        -p 8080:8080 \
-        rust:latest \
-        "/app/target/release/${binary_name}" "$@"
-}
+        # Binary name from the build output
+        local binary_name="proxmox-vm-manager"
+        local release_binary="/app/target/release/${binary_name}"
+        local debug_binary="/app/target/debug/${binary_name}"
+        local binary_path=""
 
-# Function to create a MUSL build
-musl_build() {
+        # Check if release binary exists
+        if docker run --rm \
+            -v "${VOLUME_NAME}-target:/app/target" \
+            busybox \
+            ls "${release_binary}" >/dev/null 2>&1; then
+            binary_path="${release_binary}"
+            echo "✅ Found release build at: ${binary_path}"
+        # Otherwise check for debug build
+        elif docker run --rm \
+            -v "${VOLUME_NAME}-target:/app/target" \
+            busybox \
+            ls "${debug_binary}" >/dev/null 2>&1; then
+            binary_path="${debug_binary}"
+            echo "ℹ️  Using debug build at: ${binary_path}"
+        else
+            echo "❌ No binary found. Building in debug mode first..."
+            if ! build --debug; then
+                echo "❌ Failed to build the application" >&2
+                return 1
+            fi
+            binary_path="${debug_binary}"
+        fi
+
+        # Show target directory contents for debugging
+        echo "\n📂 Target directory contents:"
+        docker run --rm \
+            -v "${VOLUME_NAME}-target:/app/target" \
+            busybox \
+            find /app/target -type f -name "${binary_name}*" 2>/dev/null || echo "No matching files found"
+
+        # Run the binary
+        echo "\n🏃 Running: ${binary_path} $*"
+        docker run --rm \
+            -it \
+            -v "${PROJECT_ROOT}:/app" \
+            -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+            -v "${VOLUME_NAME}-target:/app/target" \
+            -w /app \
+            "rust:latest" \
+            "${binary_path}" "$@"
+    }
+
+    # Function to create a MUSL build
+    musl_build() {
+        # First argument is the Rust version, rest are passed to cargo
+        local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
+        shift  # Remove the version from arguments
+
+        echo "🔨 Building MUSL static binary with Rust ${rust_version}..."
+    # First argument is the Rust version, rest are passed to cargo
     local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
+    shift  # Remove the version from arguments
+
     echo "🔨 Building MUSL static binary with Rust ${rust_version}..."
 
     # Check for source files first
@@ -427,15 +528,14 @@ musl_build() {
     # Copy the build script to the project directory
     cp "$build_script_path" "${PROJECT_ROOT}/docker/"
 
-    # Run the build in the container
+    # Run the MUSL build in the container with the specified Rust version
     if docker run --rm \
         -v "${PROJECT_ROOT}:/app" \
         -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
         -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
         -w /app \
-        -e RUSTFLAGS='-C target-feature=+crt-static' \
         -e RUST_BACKTRACE=1 \
-        rust:latest \
+        "rust:${rust_version}" \
         /bin/sh -c "chmod +x /app/docker/build-musl.sh && /app/docker/build-musl.sh"; then
 
         # If we get here, the build was successful
@@ -476,45 +576,56 @@ main() {
             ;;
         build)
             shift
-            build "$@"
+            # Handle version parameter if provided
+            if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+                version="$1"
+                shift
+                build "$version" "$@"
+            else
+                build latest "$@"
+            fi
             ;;
         musl)
-            musl_build "${2:-}"
+            # Pass all remaining arguments to musl_build
+            musl_build "$@"
+            ;;
+        test)
+            shift
+            # Handle version parameter if provided
+            if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+                version="$1"
+                shift
+                test "$version" "$@"
+            else
+                test latest "$@"
+            fi
             ;;
         run)
             shift
             run "$@"
             ;;
-        test)
+        shell)
             shift
-            test "$@"
-            ;;
-        check)
-            shift
-            check "$@"
-            ;;
-        clippy)
-            shift
-            clippy "$@"
-            ;;
-        fmt)
-            shift
-            fmt "$@"
+            # Handle version parameter if provided
+            if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+                version="$1"
+                shift
+                shell "$version" "$@"
+            else
+                shell latest "$@"
+            fi
             ;;
         clean)
             shift
-            clean "$@"
+            clean
             ;;
-        shell)
-            shift
-            shell "$@"
-            ;;
-        help|--help|-h)
+        help|--help|'-h'|'')
             show_help
             ;;
         *)
-            # If no command matches, run it directly in the container
-            run_command "$@"
+            echo "Unknown command: $1"
+            show_help
+            exit 1
             ;;
     esac
 }
