@@ -181,6 +181,11 @@ dev() {
         return 1
     fi
 
+    # Use the specified Rust version or default to 'latest'
+    local rust_image="rust:${rust_version}"
+    
+    echo -e "🐳 Using Docker image: ${rust_image}"
+    
     docker run -it --rm \
         --name "${CONTAINER_NAME}" \
         -v "${PWD}:/app" \
@@ -189,8 +194,8 @@ dev() {
         -w /app \
         -e RUST_BACKTRACE=1 \
         -e RUST_LOG=info \
-        "${IMAGE_NAME}" \
-        cargo watch -x "build --all-features" -x run
+        "${rust_image}" \
+        sh -c "rustc --version && cargo --version && cargo watch -x 'build --all-features' -x run"
 }
 
 
