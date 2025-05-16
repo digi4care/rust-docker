@@ -312,17 +312,28 @@ shell() {
 
 # Function to run the application
 run() {
-    echo "Running application..."
-    (cd "$PROJECT_ROOT" && docker run \
-        --rm \
+    echo "🚀 Running application..."
+    
+    # Ensure volumes exist
+    if ! ensure_volumes; then
+        return 1
+    fi
+    
+    # Get binary name from Cargo.toml
+    local binary_name
+    binary_name=$(grep -m 1 '^name = ' "${PROJECT_ROOT}/Cargo.toml" | cut -d'"' -f2)
+    
+    # Run the application in the container
+    docker run --rm \
         -it \
-        --name "${CONTAINER_NAME}" \
-        -v "$PROJECT_ROOT/config:/app/config" \
+        -v "${PROJECT_ROOT}:/app" \
+        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+        -w /app \
         -e RUST_BACKTRACE=1 \
-        -e RUST_LOG=info \
-        "${IMAGE_NAME}" \
-        "$@"
-    )
+        -p 8080:8080 \
+        rust:latest \
+        "/app/target/release/${binary_name}" "$@"
 }
 
 # Function to create a MUSL build
@@ -416,7 +427,7 @@ main() {
             ;;
         run)
             shift
-            run_command cargo run -- "$@"
+            run "$@"
             ;;
         test)
             shift
