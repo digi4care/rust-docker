@@ -253,7 +253,26 @@ build() {
 # Function to run tests
 test() {
     echo -e "🧪 Running tests..."
-    run_command cargo test -- --nocapture
+    
+    # Ensure volumes exist
+    if ! ensure_volumes; then
+        return 1
+    fi
+    
+    # Run tests in the container
+    if docker run --rm \
+        -v "${PROJECT_ROOT}:/app" \
+        -v "${VOLUME_NAME}-cargo:/usr/local/cargo/registry" \
+        -v "${VOLUME_NAME}-rustup:/usr/local/rustup" \
+        -w /app \
+        -e RUST_BACKTRACE=1 \
+        rust:latest \
+        cargo test -- --nocapture; then
+        echo -e "\n✅ Tests completed successfully!"
+    else
+        echo -e "\n❌ Tests failed - check the output above for details" >&2
+        return 1
+    fi
 }
 
 # Function to check code
