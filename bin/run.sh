@@ -51,18 +51,18 @@ init_project
 ensure_volumes() {
     # Create volume for Rust cache if it doesn't exist
     if ! docker volume inspect "${VOLUME_NAME}-cargo" >/dev/null 2>&1; then
-        echo -e "${BLUE}🔧 Creating volume ${VOLUME_NAME}-cargo...${NC}"
+        echo -e "🔧 Creating volume ${VOLUME_NAME}-cargo..."
         if ! docker volume create "${VOLUME_NAME}-cargo" >/dev/null 2>&1; then
-            echo -e "${RED}❌ Failed to create volume ${VOLUME_NAME}-cargo${NC}" >&2
+            echo -e "❌ Failed to create volume ${VOLUME_NAME}-cargo" >&2
             return 1
         fi
     fi
 
     # Create volume for Rust toolchain
     if ! docker volume inspect "${VOLUME_NAME}-rustup" >/dev/null 2>&1; then
-        echo -e "${BLUE}🔧 Creating volume ${VOLUME_NAME}-rustup...${NC}"
+        echo -e "🔧 Creating volume ${VOLUME_NAME}-rustup..."
         if ! docker volume create "${VOLUME_NAME}-rustup" >/dev/null 2>&1; then
-            echo -e "${RED}❌ Failed to create volume ${VOLUME_NAME}-rustup${NC}" >&2
+            echo -e "❌ Failed to create volume ${VOLUME_NAME}-rustup" >&2
             return 1
         fi
     fi
@@ -73,7 +73,7 @@ ensure_volumes() {
 # Function to build the builder image
 build_builder() {
     local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
-    echo -e "${BLUE}🔨 Building builder image with Rust ${rust_version}...${NC}"
+    echo -e "🔨 Building builder image with Rust ${rust_version}..."
 
     ensure_volumes
 
@@ -93,7 +93,7 @@ build_runtime() {
 # Function to start the development container
 dev() {
     local rust_version="${1:-latest}"  # Default to 'latest' if no version specified
-    echo -e "${BLUE}👨‍💻 Starting development container with Rust ${rust_version}...${NC}"
+    echo -e "👨‍💻 Starting development container with Rust ${rust_version}..."
 
     ensure_volumes
 
@@ -116,7 +116,7 @@ run_command() {
     fi
 
     local cmd=("$@")
-    echo -e "${BLUE}🚀 Running command: ${cmd[*]}${NC}"
+    echo -e "🚀 Running command: ${cmd[*]}"
 
     if ! docker run -it --rm \
         -v "${PWD}:/app" \
@@ -127,7 +127,7 @@ run_command() {
         -e RUST_LOG=info \
         "${IMAGE_NAME}" \
         "${cmd[@]}"; then
-        echo -e "${RED}❌ Command failed${NC}" >&2
+        echo -e "❌ Command failed" >&2
         return 1
     fi
 }
@@ -138,19 +138,19 @@ build() {
     if [ "$#" -gt 0 ] && [ "$1" = "--debug" ]; then
         profile=""
     fi
-    echo -e "${BLUE}🔧 Building application ${profile:+(${profile#--})}...${NC}"
+    echo -e "🔧 Building application ${profile:+(${profile#--})}..."
     run_command cargo build ${profile}
 }
 
 # Function to run tests
 test() {
-    echo -e "${BLUE}🧪 Running tests...${NC}"
+    echo -e "🧪 Running tests..."
     run_command cargo test -- --nocapture
 }
 
 # Function to check code
 check() {
-    echo -e "${BLUE}🔍 Checking code...${NC}"
+    echo -e "🔍 Checking code..."
     run_command cargo check
 }
 
@@ -170,7 +170,7 @@ fmt() {
 clean() {
     echo "Cleaning project and Docker resources..."
     run_command cargo clean
-    
+
     # Clean up Docker resources
     docker rmi -f "${IMAGE_NAME}" "${IMAGE_NAME}-builder" 2>/dev/null || true
     docker builder prune -f
