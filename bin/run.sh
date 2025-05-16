@@ -16,8 +16,7 @@ declare VOLUME_NAME
 
 # Find the project root (current directory or parent with Cargo.toml)
 find_project_root() {
-    local dir
-    dir="${1:-$PWD}"
+    local dir="$PWD"  # Always start from current directory
     while [ "$dir" != "/" ]; do
         if [ -f "$dir/Cargo.toml" ]; then
             echo "$dir"
@@ -25,7 +24,7 @@ find_project_root() {
         fi
         dir="$(dirname "$dir")"
     done
-    echo "$PWD"  # Fallback to current directory
+    echo "$PWD"  # Fallback to current directory if no Cargo.toml found
 }
 
 # Initialize project variables
