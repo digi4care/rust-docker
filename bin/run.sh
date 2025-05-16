@@ -168,8 +168,12 @@ fmt() {
 
 # Function to clean
 clean() {
-    echo "Cleaning..."
+    echo "Cleaning project and Docker resources..."
     run_command cargo clean
+    
+    # Clean up Docker resources
+    docker rmi -f "${IMAGE_NAME}" "${IMAGE_NAME}-builder" 2>/dev/null || true
+    docker builder prune -f
 }
 
 # Function to enter the container shell
@@ -194,12 +198,7 @@ run() {
     )
 }
 
-# Function to clean up containers and images
-clean() {
-    echo "🧹 Cleaning up..."
-    docker rmi -f "${IMAGE_NAME}" "${IMAGE_NAME}-builder" 2>/dev/null || true
-    docker builder prune -f
-}
+# Function to create a MUSL build
 
 # Function to create a MUSL build
 musl_build() {
