@@ -195,7 +195,15 @@ dev() {
         -e RUST_BACKTRACE=1 \
         -e RUST_LOG=info \
         "${rust_image}" \
-        sh -c "rustc --version && cargo --version && cargo watch -x 'build --all-features' -x run"
+        sh -c "
+            rustc --version && 
+            cargo --version && 
+            if ! command -v cargo-watch >/dev/null 2>&1; then
+                echo 'Installing cargo-watch...' && 
+                cargo install cargo-watch
+            fi && 
+            cargo watch -x 'build --all-features' -x run
+        "
 }
 
 
